@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
-use dotenvy::dotenv;
+use clap::{Parser, Subcommand, ValueEnum};
+use dotenvy::from_filename;
 use std::env;
 
 mod migration;
@@ -8,8 +8,19 @@ mod migration;
 #[command(name = "migrate")]
 #[command(about = "A simple PostgreSQL migration tool", long_about = None)]
 struct Cli {
+    /// Environment to use (production, test, development)
+    #[arg(long, value_enum, default_value_t = Env::Development)]
+    env: Env,
+
     #[clap(subcommand)]
     command: Commands,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum Env {
+    Production,
+    Test,
+    Development,
 }
 
 #[derive(Subcommand)]
@@ -29,9 +40,15 @@ enum Commands {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
-
     let cli = Cli::parse();
+
+    // Load corresponding .env file
+    let env_filename = match cli.env {
+        Env::Production => ".env.production",
+        Env::Test => ".env.test",
+        Env::Development => ".env",
+    };
+    from_filename(env_filename).ok();
 
     let db_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set in .env or environment");
