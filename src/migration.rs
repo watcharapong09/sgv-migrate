@@ -3,8 +3,8 @@ use std::fs;
 use std::path::Path;
 use regex::Regex;
 
-pub fn list(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
-    ensure_migrations_table(conn)?;
+pub fn list(conn: &mut Client, schema: &str) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_migrations_table(conn, schema)?;
 
     // 1. Load applied versions from the database
     let applied_versions: std::collections::HashSet<String> = conn
@@ -23,11 +23,10 @@ pub fn list(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        let filename = path.file_stem().unwrap().to_str().unwrap();
-        let (version, _name) = filename.split_once('_').ok_or("Invalid filename format")?;
+        let filename = path.file_name().unwrap().to_str().unwrap();
 
         // 3. If not applied yet, print it
-        if !applied_versions.contains(version) {
+        if !applied_versions.contains(filename) {
             println!("{}", path.display());
             pending += 1;
         }
@@ -40,8 +39,8 @@ pub fn list(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn up(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
-    ensure_migrations_table(conn)?;
+pub fn up(conn: &mut Client, schema: &str) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_migrations_table(conn, schema)?;
 
     let mut files: Vec<_> = fs::read_dir("migrations")?
         .filter_map(Result::ok)
@@ -86,8 +85,8 @@ pub fn up(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
 /// - `None` => 1 step (default)
 /// - `Some(-1)` => all
 /// - `Some(n)` => n steps
-pub fn down(conn: &mut Client, step: Option<i32>) -> Result<(), Box<dyn std::error::Error>> {
-    ensure_migrations_table(conn)?;
+pub fn down(conn: &mut Client, step: Option<i32>, schema: &str) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_migrations_table(conn, schema)?;
 
     let applied: Vec<(String,)> = conn
         .query("SELECT name FROM migrations ORDER BY applied_at DESC", &[])?
@@ -124,13 +123,23 @@ pub fn down(conn: &mut Client, step: Option<i32>) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-fn ensure_migrations_table(conn: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_migrations_table(conn: &mut Client, schema: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Explicitly create schema if it doesn't exist
+    let create_schema_sql = format!("CREATE SCHEMA IF NOT EXISTS {}", schema);
+    conn.batch_execute(&create_schema_sql)?;
+
+    // Ensure search_path is set (optional if already in DATABASE_URL)
+    let set_search_path = format!("SET search_path TO {}", schema);
+    conn.batch_execute(&set_search_path)?;
+
+    // Create migrations table in that schema
     conn.batch_execute(
         "CREATE TABLE IF NOT EXISTS migrations (
             name TEXT PRIMARY KEY,
-            applied_at TIMESTAMPTZ DEFAULT now()
-        );"
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"
     )?;
+
     Ok(())
 }
 

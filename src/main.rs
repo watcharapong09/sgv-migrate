@@ -12,6 +12,10 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = Env::Development)]
     env: Env,
 
+    /// Target schema name (default: public)
+    #[arg(long, default_value = "public")]
+    schema: String,
+
     #[clap(subcommand)]
     command: Commands,
 }
@@ -41,6 +45,7 @@ enum Commands {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    let schema = &cli.schema;
 
     // Load corresponding .env file
     let env_filename = match cli.env {
@@ -50,8 +55,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     from_filename(env_filename).ok();
 
-    let db_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set in .env or environment");
+    let db_url = format!(
+        "{}?options=-c%20search_path={}",
+        env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
+        schema
+    );
 
     match cli.command {
         Commands::List => {
@@ -59,14 +67,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut conn = postgres::Client::connect(&db_url, postgres::NoTls)?;
 
-            migration::list(&mut conn)?;
+            migration::list(&mut conn, schema)?;
 
             conn.close()?;
         },
         Commands::Up => {
             let mut conn = postgres::Client::connect(&db_url, postgres::NoTls)?;
 
-            migration::up(&mut conn)?;
+            migration::up(&mut conn, schema)?;
 
             conn.close()?;
             println!("Migrations applied successfully.");
@@ -74,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Down { step } => {
             let mut conn = postgres::Client::connect(&db_url, postgres::NoTls)?;
             
-            migration::down(&mut conn, step)?;
+            migration::down(&mut conn, step, schema)?;
 
             conn.close()?;
 
