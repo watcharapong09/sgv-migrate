@@ -2,9 +2,19 @@
 name = "sgv-migrate"
 version = "0.1.0"
 edition = "2024"
+description = "A simple PostgreSQL migration CLI tool"
+license = "MIT"
+repository = "https://github.com/watcharapong09/sgv-migrate"
+keywords = ["postgres", "migration", "cli"]
+categories = ["database", "command-line-utilities"]
+readme = "README.md"
+authors = ["Watcharapong Essaranuwatanakul <e.watcharapong@gmail.com>"]
 
 [dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
 dotenvy = "0.15.7"
 postgres = "0.19.10"
 regex = "1.11.1"
+
+[package]
+exclude = ["target/*", "*.sql", "*.env"]
