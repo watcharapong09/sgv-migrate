@@ -9,12 +9,10 @@ keywords = ["postgres", "migration", "cli"]
 categories = ["database", "command-line-utilities"]
 readme = "README.md"
 authors = ["Watcharapong Essaranuwatanakul <e.watcharapong@gmail.com>"]
+exclude = ["target/*", "*.sql", "*.env"]
 
 [dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
 dotenvy = "0.15.7"
 postgres = "0.19.10"
 regex = "1.11.1"
-
-[package]
-exclude = ["target/*", "*.sql", "*.env"]
