@@ -45,7 +45,15 @@ pub fn up(conn: &mut Client, schema: &str) -> Result<(), Box<dyn std::error::Err
     let mut files: Vec<_> = fs::read_dir("migrations")?
         .filter_map(Result::ok)
         .collect();
-    files.sort_by_key(|e| e.path());
+    
+    files.sort_by_key(|e| e.file_name());
+
+    // Find the latest applied migration
+    let last_applied: Option<String> = conn
+        .query("SELECT name FROM migrations ORDER BY name DESC LIMIT 1", &[])?
+        .into_iter()
+        .map(|row| row.get(0))
+        .next();
 
     let mut applied_any = false;
 
@@ -56,22 +64,20 @@ pub fn up(conn: &mut Client, schema: &str) -> Result<(), Box<dyn std::error::Err
         }
 
         let filename = path.file_name().unwrap().to_str().unwrap(); // e.g., 0001_create_users.sql
-        let migration = parse_sql_file(&path)?; // Parse up/down SQL
-
-        let already_applied = conn.query_opt(
-            "SELECT 1 FROM migrations WHERE name = $1",
-            &[&filename],
-        )?;
-
-        if already_applied.is_none() {
-            println!("🔼 Applying: {}", filename);
-            conn.batch_execute(&migration.up_sql)?;
-            conn.execute(
-                "INSERT INTO migrations (name) VALUES ($1)",
-                &[&filename],
-            )?;
-            applied_any = true;
+        
+        // Skip if this filename is <= the last applied migration
+        if let Some(ref last) = last_applied {
+            if filename.to_string() <= *last {
+                continue;
+            }
         }
+        
+        let migration = parse_sql_file(&path)?;
+
+        println!("🔼 Applying: {}", filename);
+        conn.batch_execute(&migration.up_sql)?;
+        conn.execute("INSERT INTO migrations (name) VALUES ($1)", &[&filename])?;
+        applied_any = true;
     }
 
     if !applied_any {
